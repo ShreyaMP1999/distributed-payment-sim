@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: paymentsim-postgres
+    environment:
+      POSTGRES_DB: paymentsim
+      POSTGRES_USER: paymentsim
+      POSTGRES_PASSWORD: paymentsim
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paymentsim -d paymentsim"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: paymentsim-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
