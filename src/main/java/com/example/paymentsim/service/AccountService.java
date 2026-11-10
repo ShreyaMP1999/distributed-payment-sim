@@ -6,7 +6,6 @@ import com.example.paymentsim.dto.DepositRequest;
 import com.example.paymentsim.entity.Account;
 import com.example.paymentsim.exception.NotFoundException;
 import com.example.paymentsim.repository.AccountRepository;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +28,6 @@ public class AccountService {
     return new AccountResponse(saved.getId(), saved.getOwnerName(), saved.getBalanceCents());
   }
 
-  @Cacheable(value = "accounts", key = "#accountId.toString()")
   public AccountResponse get(UUID accountId) {
     Account a = accountRepository.findById(accountId)
         .orElseThrow(() -> new NotFoundException("Account not found: " + accountId));
@@ -46,3 +44,4 @@ public class AccountService {
     return new AccountResponse(saved.getId(), saved.getOwnerName(), saved.getBalanceCents());
   }
 }
+

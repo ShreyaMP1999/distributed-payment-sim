@@ -19,19 +19,19 @@ import java.util.UUID;
 @Service
 public class PaymentService {
 
+  private final IdempotencyService idempotencyService;
   private final PaymentRepository paymentRepository;
   private final AccountRepository accountRepository;
   private final LedgerEntryRepository ledgerEntryRepository;
-  private final IdempotencyService idempotencyService;
 
   public PaymentService(PaymentRepository paymentRepository,
                         AccountRepository accountRepository,
                         LedgerEntryRepository ledgerEntryRepository,
                         IdempotencyService idempotencyService) {
+    this.idempotencyService = idempotencyService;
     this.paymentRepository = paymentRepository;
     this.accountRepository = accountRepository;
     this.ledgerEntryRepository = ledgerEntryRepository;
-    this.idempotencyService = idempotencyService;
   }
 
   public PaymentResponse get(UUID id) {
@@ -48,16 +48,10 @@ public class PaymentService {
 
     String requestHash = HashUtil.sha256(req.payerAccountId() + "|" + req.payeeAccountId() + "|" + req.amountCents());
 
-    // 1) claim/validate idempotency in Redis
-    idempotencyService.claimOrValidate(idempotencyKey, requestHash);
-
-    // 2) If already completed, return existing payment
-    var existingPaymentId = idempotencyService.getPaymentIdIfCompleted(idempotencyKey);
-    if (existingPaymentId.isPresent()) {
-      UUID pid = UUID.fromString(existingPaymentId.get());
-      Payment existing = paymentRepository.findById(pid)
-          .orElseThrow(() -> new NotFoundException("Idempotent payment missing in DB: " + pid));
-      return toResponse(existing);
+    // The committed database record is authoritative, even after Redis restarts.
+    var existing = idempotencyService.findCompleted(idempotencyKey, requestHash);
+    if (existing.isPresent()) {
+      return toResponse(existing.get());
     }
 
     // 3) Create payment record (PENDING)
@@ -71,7 +65,7 @@ public class PaymentService {
         Payment.Status.PENDING,
         requestHash
     );
-    paymentRepository.save(payment);
+    paymentRepository.saveAndFlush(payment);
 
     // 4) Load accounts and apply business logic (optimistic locking via @Version on Account)
     Account payer = accountRepository.findById(req.payerAccountId())
@@ -79,30 +73,20 @@ public class PaymentService {
     Account payee = accountRepository.findById(req.payeeAccountId())
         .orElseThrow(() -> new NotFoundException("Payee account not found: " + req.payeeAccountId()));
 
-    try {
-      payer.withdraw(req.amountCents());
-      payee.deposit(req.amountCents());
-
-      accountRepository.save(payer);
-      accountRepository.save(payee);
-
-      // 5) Ledger entries
-      ledgerEntryRepository.save(new LedgerEntry(UUID.randomUUID(), payer.getId(), paymentId, LedgerEntry.Direction.DEBIT, req.amountCents()));
-      ledgerEntryRepository.save(new LedgerEntry(UUID.randomUUID(), payee.getId(), paymentId, LedgerEntry.Direction.CREDIT, req.amountCents()));
-
-      // 6) Mark completed
-      payment.markCompleted();
-      paymentRepository.save(payment);
-
-      // 7) Mark idempotency mapping
-      idempotencyService.markCompleted(idempotencyKey, requestHash, paymentId.toString());
-
-      return toResponse(payment);
-    } catch (RuntimeException ex) {
-      payment.markFailed();
-      paymentRepository.save(payment);
-      throw ex;
+    // Validate both sides before changing managed entities.
+    if (payer.getBalanceCents() < req.amountCents()) {
+      throw new BadRequestException("Insufficient funds");
     }
+    Math.addExact(payee.getBalanceCents(), req.amountCents());
+    payer.withdraw(req.amountCents());
+    payee.deposit(req.amountCents());
+    accountRepository.save(payer);
+    accountRepository.save(payee);
+    ledgerEntryRepository.save(new LedgerEntry(UUID.randomUUID(), payer.getId(), paymentId, LedgerEntry.Direction.DEBIT, req.amountCents()));
+    ledgerEntryRepository.save(new LedgerEntry(UUID.randomUUID(), payee.getId(), paymentId, LedgerEntry.Direction.CREDIT, req.amountCents()));
+    payment.markCompleted();
+    paymentRepository.save(payment);
+    return toResponse(payment);
   }
 
   private PaymentResponse toResponse(Payment p) {
@@ -116,3 +100,4 @@ public class PaymentService {
     );
   }
 }
+
