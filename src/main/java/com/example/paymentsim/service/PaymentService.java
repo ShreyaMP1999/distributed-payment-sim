@@ -65,13 +65,15 @@ public class PaymentService {
         Payment.Status.PENDING,
         requestHash
     );
-    paymentRepository.saveAndFlush(payment);
 
     // 4) Load accounts and apply business logic (optimistic locking via @Version on Account)
     Account payer = accountRepository.findById(req.payerAccountId())
         .orElseThrow(() -> new NotFoundException("Payer account not found: " + req.payerAccountId()));
     Account payee = accountRepository.findById(req.payeeAccountId())
         .orElseThrow(() -> new NotFoundException("Payee account not found: " + req.payeeAccountId()));
+
+    // Flush the unique key only after resolving accounts, so unknown IDs return 404.
+    paymentRepository.saveAndFlush(payment);
 
     // Validate both sides before changing managed entities.
     if (payer.getBalanceCents() < req.amountCents()) {
