@@ -1,14 +1,14 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 spring:
   application:
     name: payment-sim
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/paymentsim
-    username: paymentsim
-    password: paymentsim
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/paymentsim}
+    username: ${DB_USERNAME:paymentsim}
+    password: ${DB_PASSWORD:paymentsim}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -23,14 +23,15 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
   cache:
-    type: redis
+    type: none
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics
+

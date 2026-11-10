@@ -1,22 +1,41 @@
 services:
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/paymentsim
+      DB_USERNAME: paymentsim
+      DB_PASSWORD: ${DB_PASSWORD:-paymentsim}
+      REDIS_HOST: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
   postgres:
     image: postgres:16
-    container_name: paymentsim-postgres
     environment:
       POSTGRES_DB: paymentsim
       POSTGRES_USER: paymentsim
-      POSTGRES_PASSWORD: paymentsim
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-paymentsim}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U paymentsim -d paymentsim"]
       interval: 5s
       timeout: 3s
-      retries: 10
-
+      retries: 20
   redis:
     image: redis:7
-    container_name: paymentsim-redis
     ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres-data:
