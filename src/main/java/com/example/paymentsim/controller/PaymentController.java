@@ -26,8 +26,8 @@ public class PaymentController {
       @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey,
       @Valid @RequestBody CreatePaymentRequest req
   ) {
-    if (idempotencyKey == null || idempotencyKey.isBlank()) {
-      throw new BadRequestException("Idempotency-Key header is required");
+    if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.trim().length() > 120) {
+      throw new BadRequestException("Idempotency-Key must contain 1 to 120 characters");
     }
     return paymentService.create(idempotencyKey.trim(), req);
   }
@@ -37,3 +37,4 @@ public class PaymentController {
     return paymentService.get(id);
   }
 }
+

@@ -41,10 +41,12 @@ public class Account {
   }
 
   public void deposit(long amountCents) {
+    if (amountCents <= 0) throw new IllegalArgumentException("Amount must be positive");
     this.balanceCents = Math.addExact(this.balanceCents, amountCents);
   }
 
   public void withdraw(long amountCents) {
+    if (amountCents <= 0) throw new IllegalArgumentException("Amount must be positive");
     if (this.balanceCents < amountCents) {
       throw new IllegalStateException("Insufficient funds");
     }
@@ -56,3 +58,4 @@ public class Account {
   public long getBalanceCents() { return balanceCents; }
   public long getVersion() { return version; }
 }
+

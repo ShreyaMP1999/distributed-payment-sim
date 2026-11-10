@@ -37,6 +37,19 @@ public class GlobalExceptionHandler {
     return build(HttpStatus.BAD_REQUEST, "Validation failed", req.getRequestURI());
   }
 
+  @ExceptionHandler({org.springframework.web.bind.MissingRequestHeaderException.class,
+      org.springframework.http.converter.HttpMessageNotReadableException.class,
+      org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+      IllegalArgumentException.class, ArithmeticException.class})
+  public ResponseEntity<ApiError> malformed(Exception ex, HttpServletRequest req) {
+    return build(HttpStatus.BAD_REQUEST, "Invalid request, identifier, or amount", req.getRequestURI());
+  }
+
+  @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+  public ResponseEntity<ApiError> integrity(Exception ex, HttpServletRequest req) {
+    return build(HttpStatus.CONFLICT, "Conflicting write. Retry the request with the same Idempotency-Key.", req.getRequestURI());
+  }
+
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiError> generic(Exception ex, HttpServletRequest req) {
     return build(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected error", req.getRequestURI());
@@ -53,3 +66,4 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(status).body(body);
   }
 }
+
