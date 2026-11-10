@@ -21,7 +21,6 @@ class PaymentServiceTest {
     PaymentRepository paymentRepo = Mockito.mock(PaymentRepository.class);
     AccountRepository accountRepo = Mockito.mock(AccountRepository.class);
     LedgerEntryRepository ledgerRepo = Mockito.mock(LedgerEntryRepository.class);
-    IdempotencyService idem = Mockito.mock(IdempotencyService.class);
 
     UUID payerId = UUID.randomUUID();
     UUID payeeId = UUID.randomUUID();
@@ -31,13 +30,13 @@ class PaymentServiceTest {
 
     Mockito.when(accountRepo.findById(payerId)).thenReturn(Optional.of(payer));
     Mockito.when(accountRepo.findById(payeeId)).thenReturn(Optional.of(payee));
-    Mockito.when(idem.getPaymentIdIfCompleted(any())).thenReturn(Optional.empty());
+    Mockito.when(paymentRepo.findByIdempotencyKey(any())).thenReturn(Optional.empty());
 
-    Mockito.when(paymentRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    Mockito.when(paymentRepo.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
     Mockito.when(accountRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
     Mockito.when(ledgerRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    PaymentService service = new PaymentService(paymentRepo, accountRepo, ledgerRepo, idem);
+    PaymentService service = new PaymentService(paymentRepo, accountRepo, ledgerRepo, new IdempotencyService(paymentRepo));
 
     var res = service.create("idem-1", new CreatePaymentRequest(payerId, payeeId, 5000));
 
@@ -48,3 +47,4 @@ class PaymentServiceTest {
     assertEquals(5000, payee.getBalanceCents());
   }
 }
+

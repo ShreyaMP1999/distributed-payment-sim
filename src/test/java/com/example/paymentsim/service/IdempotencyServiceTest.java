@@ -1,30 +1,35 @@
 package com.example.paymentsim.service;
 
+import com.example.paymentsim.entity.Payment;
 import com.example.paymentsim.exception.ConflictException;
+import com.example.paymentsim.repository.PaymentRepository;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.StringRedisTemplate;
-
-import java.time.Duration;
-
+import java.util.Optional;
+import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 class IdempotencyServiceTest {
-
-  @Test
-  void reuseKeyWithDifferentPayloadThrowsConflict() {
-    StringRedisTemplate redis = Mockito.mock(StringRedisTemplate.class);
-    @SuppressWarnings("unchecked")
-    ValueOperations<String, String> ops = Mockito.mock(ValueOperations.class);
-
-    Mockito.when(redis.opsForValue()).thenReturn(ops);
-    Mockito.when(ops.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
-    Mockito.when(ops.get(anyString())).thenReturn("hashA|");
-
-    IdempotencyService svc = new IdempotencyService(redis);
-
-    assertThrows(ConflictException.class, () -> svc.claimOrValidate("k1", "hashB"));
+  final PaymentRepository repository = mock(PaymentRepository.class);
+  final IdempotencyService service = new IdempotencyService(repository);
+  Payment payment(Payment.Status status) {
+    return new Payment(UUID.randomUUID(), "key", UUID.randomUUID(), UUID.randomUUID(), 100, status, "hash");
+  }
+  @Test void newKeyIsAvailable() {
+    when(repository.findByIdempotencyKey("key")).thenReturn(Optional.empty());
+    assertTrue(service.findCompleted("key", "hash").isEmpty());
+  }
+  @Test void committedPaymentIsReturned() {
+    Payment p = payment(Payment.Status.COMPLETED);
+    when(repository.findByIdempotencyKey("key")).thenReturn(Optional.of(p));
+    assertSame(p, service.findCompleted("key", "hash").orElseThrow());
+  }
+  @Test void changedPayloadIsRejected() {
+    when(repository.findByIdempotencyKey("key")).thenReturn(Optional.of(payment(Payment.Status.COMPLETED)));
+    assertThrows(ConflictException.class, () -> service.findCompleted("key", "different"));
+  }
+  @Test void incompletePaymentIsRejected() {
+    when(repository.findByIdempotencyKey("key")).thenReturn(Optional.of(payment(Payment.Status.PENDING)));
+    assertThrows(ConflictException.class, () -> service.findCompleted("key", "hash"));
   }
 }
