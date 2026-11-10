@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payment Simulator</title>
+<style>
+:root{font:16px system-ui;color:#18243a;background:#eef3fa}body{max-width:1000px;margin:40px auto;padding:0 20px}h1{margin-bottom:8px}header p{color:#526079}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}section{background:white;padding:24px;border-radius:16px;box-shadow:0 4px 24px #192d4f0a}label{display:block;margin:14px 0 6px}input,button{font:inherit;box-sizing:border-box;width:100%;padding:10px;border:1px solid #bac8de;border-radius:6px}button{background:#245bd7;color:white;border:0;margin-top:20px;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#15233d;color:#eaf1ff;padding:20px;border-radius:12px;min-height:80px}small{color:#526079}a{color:#245bd7}
+</style>
+<header><h1>Payment Simulator</h1><p>Create accounts, move test money, and safely repeat a payment.</p><p><small>Demo only. Amounts are whole cents. Save the account IDs shown below.</small></p></header>
+<main>
+<section><h2>Create account</h2><form id="create"><label for="owner">Owner name</label><input id="owner" required maxlength="120" placeholder="Alice"><label for="initial">Starting balance in cents</label><input id="initial" type="number" min="0" step="1" value="10000" required><button>Create account</button></form></section>
+<section><h2>Account balance</h2><form id="lookup"><label for="account">Account ID</label><input id="account" required placeholder="Account UUID"><button>Get balance</button></form><form id="deposit"><label for="depositAmount">Deposit in cents</label><input id="depositAmount" type="number" min="1" step="1" value="100" required><button>Deposit into this account</button></form></section>
+<section><h2>Send payment</h2><form id="payment"><label for="payer">Payer ID</label><input id="payer" required><label for="payee">Payee ID</label><input id="payee" required><label for="amount">Amount in cents</label><input id="amount" type="number" min="1" step="1" value="250" required><label for="key">Idempotency key</label><input id="key" required maxlength="120"><small>Keep this key to retry. Change it for a new payment.</small><button>Send or retry payment</button></form><button id="newKey" type="button">Generate new payment key</button></section>
+</main>
+<h2>Result</h2><pre id="result" role="status" aria-live="polite">Ready. Create two accounts to get started.</pre>
+<script>
+const value=id=>document.getElementById(id).value.trim();
+function cents(id){const n=Number(value(id));if(!Number.isSafeInteger(n))throw Error('Enter a whole amount within the safe integer range.');return n;}
+function newKey(){document.getElementById('key').value=crypto.randomUUID();}newKey();document.getElementById('newKey').onclick=newKey;
+async function request(url,body,key){const headers={'Content-Type':'application/json'};if(key)headers['Idempotency-Key']=key;const r=await fetch('/api/v1/'+url,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined});const data=await r.json();document.getElementById('result').textContent=JSON.stringify(data,null,2);if(!r.ok)throw Error(data.message||'Request failed');return data;}
+function form(id,run){document.getElementById(id).addEventListener('submit',async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await run();}catch(err){document.getElementById('result').textContent=err.message;}finally{button.disabled=false;}});}
+form('create',async()=>{const a=await request('accounts',{ownerName:value('owner'),initialBalanceCents:cents('initial')});document.getElementById('account').value=a.id;if(!value('payer'))document.getElementById('payer').value=a.id;else if(!value('payee'))document.getElementById('payee').value=a.id;});
+form('lookup',()=>request('accounts/'+encodeURIComponent(value('account'))));
+form('deposit',()=>{if(!value('account'))throw Error('Enter an account ID first.');return request('accounts/'+encodeURIComponent(value('account'))+'/deposit',{amountCents:cents('depositAmount')});});
+form('payment',()=>request('payments',{payerAccountId:value('payer'),payeeAccountId:value('payee'),amountCents:cents('amount')},value('key')));
+</script>
+</html>
